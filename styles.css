@@ -1,0 +1,64 @@
+body {
+    text-align: center;
+    background: #222;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+#grid {
+    width: 600px;
+    margin: 20px auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-gap: 10px;
+}
+
+
+.subheading {
+    margin-top: 4px;
+    margin-bottom: 12px;
+    font-size: 18px;
+    color: #ccc;
+    font-weight: 400;
+}
+
+.grid-cell {
+    width: 180px;
+    height: 140px;
+    border: 3px solid white;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.grid-cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+
+#timer {
+    font-size: 24px;
+    margin-top: 10px;
+    color: #0f0;
+}
+
+#timerBarContainer {
+    width: 600px;
+    height: 20px;
+    background: #444;
+    margin: 10px auto;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+#timerBar {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #00ff00, #00aa00);
+    transition: width 0.1s linear;
+}
+
+.hidden {
+    display: none;
+}

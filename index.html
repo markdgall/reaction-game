@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Foreign Body Hunt</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --max-width: 680px;
+      --grid-gap: 10px;
+      --cell-border: 3px;
+      --timer-height: 18px;
+      --accent: #00ff72;
+      --accent-dark: #00b84f;
+      --bg: #4E143D;
+      --fg: #ffffff;
+      --muted: #bdbdbd;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 16px 40px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(20px, 3vw, 28px);
+      letter-spacing: 0.3px;
+      text-align: center;
+    }
+
+    #hud {
+      width: min(92vw, var(--max-width));
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px 16px;
+      margin: 6px auto 8px;
+    }
+
+    #score { font-weight: 700; }
+    #timer { color: var(--accent); font-weight: 600; }
+
+    #timerBarContainer {
+      grid-column: 1 / -1;
+      width: 100%;
+      height: var(--timer-height);
+      background: #3a3a3a;
+      border-radius: 999px;
+      overflow: hidden;
+      outline: 1px solid rgba(255,255,255,0.08);
+    }
+
+    #timerBar {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-dark));
+      transition: width 0.08s linear;
+    }
+
+    #grid {
+      width: min(92vw, var(--max-width));
+      margin: 14px auto 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--grid-gap);
+    }
+
+    .grid-cell {
+      aspect-ratio: 9 / 7; /* responsive cell height */
+      border: var(--cell-border) solid white;
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+      background: #111;
+      user-select: none;
+      -webkit-user-drag: none;
+      transform: translateZ(0);
+    }
+
+    .grid-cell img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+    }
+
+    /* Click feedback (flash overlay) */
+    .flash::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 255, 114, 0.32);
+      animation: flash 220ms ease;
+      pointer-events: none;
+    }
+    .flash.bad::after {
+      background: rgba(0, 255, 114, 0.32);
+    }
+    .flash.good::after {
+      background: rgba(255, 64, 64, 0.32);
+    }
+    @keyframes flash {
+      from { opacity: 1; } to { opacity: 0; }
+    }
+
+    #endScreen {
+      width: min(92vw, var(--max-width));
+      margin: 18px auto 0;
+      padding: 18px;
+      background: #121212;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+    }
+
+    #endScreen h2 {
+      margin: 6px 0 8px;
+    }
+
+    #finalScore { font-size: 18px; margin: 4px 0 10px; }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 6px 0 12px;
+    }
+
+    input[type="text"] {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      background: #0f0f0f;
+      color: var(--fg);
+      min-width: 180px;
+      outline: none;
+    }
+    input[type="text"]::placeholder { color: var(--muted); }
+
+    button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #2b2b2b;
+      background: #2a2a2a;
+      color: var(--fg);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--accent-dark);
+      border-color: #067d43;
+      color: #031c11;
+    }
+
+    #leaderboard {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+    }
+    #leaderboard li {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: #0f0f0f;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .muted { color: var(--muted); }
+
+    .hidden { display: none !important; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Foreign Body Hunt</h1>
+  <h2 class="subheading">Click the foreign body images as fast as you can - avoid good product, quality issues and bad GMP!</h2>
+  <div id="hud">
+    <div id="score">Score: 0</div>
+    <div id="timer">Time Left: 30s</div>
+    <div id="timerBarContainer"><div id="timerBar"></div></div>
+  </div>
+
+  <div id="grid" aria-label="Game grid" role="grid"></div>
+
+  <div id="endScreen" class="hidden" role="dialog" aria-live="polite">
+    <h2>Game Over</h2>
+    <p id="finalScore"></p>
+
+    <div class="row">
+      <input id="playerName" type="text" maxlength="20" placeholder="Enter your name" />
+      <button class="primary" id="saveBtn">Save Score</button>
+      <button id="playAgainBtn">Play Again</button>
+    </div>
+
+    <h3>Leaderboard <span class="muted">(Top 10)</span></h3>
+    <ul id="leaderboard"></ul>
+  </div>
+
+  <script>
+    /***********************
+     * Configuration
+     ***********************/
+    const GAME_TIME = 30000;          // 30 seconds
+    const AUTO_SWAP_INTERVAL = 5000;  // ms: how often all cells auto-swap
+    const SCORE_BASE_MS = 1000;       // max points per bad click (1000 - reaction_ms)
+    const LEADERBOARD_KEY = "reaction_game_leaderboard_v1";
+
+    // List your images here. Filenames with "bad" are bad images; with "good" are good images.
+    // Put the actual files in ./images/
+    const IMAGE_FILES = [
+      "images/bad1.jpg",
+      "images/bad2.jpg",
+      "images/bad3.jpg",
+      "images/bad4.jpg",
+      "images/bad5.jpg",
+      "images/bad6.jpg",
+      "images/bad7.jpg",
+      "images/bad8.jpg",
+      "images/bad9.jpg",
+      "images/bad10.jpg",
+      "images/bad11.jpg",
+      "images/bad12.jpg",
+      "images/bad13.jpg",
+      "images/bad14.jpg",
+      "images/bad15.jpg",
+      "images/bad16.jpg",
+      "images/bad17.jpg",
+      "images/bad18.jpg",
+      "images/bad19.jpg",
+      "images/bad20.jpg",
+      "images/bad21.jpg",
+      "images/bad22.jpg",
+      "images/bad23.jpg",
+      "images/bad24.jpg",
+      "images/bad25.jpg",
+      "images/bad26.jpg",
+      "images/bad27.jpg",
+      "images/bad28.jpg",
+      "images/bad29.jpg",
+      "images/bad30.jpg",
+      "images/good1.jpg",
+      "images/good2.jpg",
+      "images/good3.jpg",
+      "images/good4.jpg",
+      "images/good5.jpg",
+      "images/good6.jpg",
+      "images/good7.jpg",
+      "images/good8.jpg",
+      "images/good9.jpg",
+      "images/good10.jpg",
+      "images/good11.jpg",
+      "images/good12.jpg",
+      "images/good13.jpg",
+      "images/good14.jpg",
+      "images/good15.jpg",
+      "images/good16.jpg",
+      "images/good17.jpg",
+      "images/good18.jpg",
+      "images/good19.jpg",
+      "images/good20.jpg",
+      "images/good21.jpg",
+      "images/good22.jpg",
+      "images/good23.jpg",
+      "images/good24.jpg",
+      "images/good25.jpg",
+      "images/good26.jpg",
+      "images/good27.jpg"
+      // Add more as needed...
+    ];
+// Per-cell auto swap (milliseconds)
+const MIN_SWAP = 3000;   // fastest swap  (1 second)
+const MAX_SWAP = 9000;   // slowest swap (3 seconds)
+let cellSwapTimers = {};
+
+function startPerCellSwaps() {
+    for (let i = 0; i < 9; i++) {
+        const cellId = "cell" + i;
+
+        function scheduleNextSwap() {
+            const interval = Math.floor(Math.random() * (MAX_SWAP - MIN_SWAP)) + MIN_SWAP;
+
+            cellSwapTimers[cellId] = setTimeout(() => {
+                loadCell(cellId);
+                scheduleNextSwap();  // Schedule next one
+            }, interval);
+        }
+
+        scheduleNextSwap();
+    }
+}
+
+    /***********************
+     * State
+     ***********************/
+    let score = 0;
+    let timeLeft = GAME_TIME / 1000;
+    let timerInterval = null;
+    let timerBarInterval = null;
+    let autoSwapTimer = null;
+    let endTimeout = null;
+    let firstInteraction = false; // some browsers block audio before first user gesture
+    const cellTimers = {};        // { cellId: timestamp_ms }
+    let images = [];              // [{src, bad}, ...]
+
+    /***********************
+     * DOM Elements
+     ***********************/
+    const grid = document.getElementById("grid");
+    const scoreEl = document.getElementById("score");
+    const timerEl = document.getElementById("timer");
+    const timerBar = document.getElementById("timerBar");
+    const endScreen = document.getElementById("endScreen");
+    const finalScoreText = document.getElementById("finalScore");
+    const leaderboardEl = document.getElementById("leaderboard");
+    const nameInput = document.getElementById("playerName");
+    const saveBtn = document.getElementById("saveBtn");
+    const playAgainBtn = document.getElementById("playAgainBtn");
+
+    /***********************
+     * Sounds
+     ***********************/
+    const badSound = new Audio("sounds/bad.wav");
+    const goodSound = new Audio("sounds/good.wav");
+    const nextSound = new Audio("sounds/next.wav");
+    const gameOverSound = new Audio("sounds/gameover.wav");
+
+    // Prevent crashes if sound files are missing
+    [badSound, goodSound, nextSound, gameOverSound].forEach(a => {
+      a.onerror = () => { /* ignore missing audio */ };
+      a.preload = "auto";
+    });
+
+    function playSound(audio) {
+      if (!firstInteraction) return; // wait for first user gesture
+      try { audio.currentTime = 0; audio.play(); } catch(e) { /* ignore */ }
+    }
+
+    /***********************
+     * Game Setup
+     ***********************/
+    function preloadImages() {
+      images = IMAGE_FILES.map(src => ({ src, bad: src.toLowerCase().includes("bad") }));
+      // Optional: warm cache
+      images.forEach(({ src }) => { const img = new Image(); img.src = src; });
+    }
+
+    function randomImage() {
+      return images[Math.floor(Math.random() * images.length)];
+    }
+
+    function loadCell(cellId) {
+      const imgData = randomImage();
+      const cell = document.getElementById(cellId);
+      if (!cell) return;
+
+      const img = cell.querySelector("img");
+      img.src = imgData.src;
+      img.dataset.isBad = imgData.bad;
+
+      cellTimers[cellId] = performance.now();
+      playSound(nextSound);
+    }
+
+    function addFlash(cell, kind /* 'good' | 'bad' */) {
+      cell.classList.remove("flash", "good", "bad");
+      void cell.offsetWidth; // reflow to restart animation
+      cell.classList.add("flash", kind);
+      setTimeout(() => {
+        cell.classList.remove("flash", "good", "bad");
+      }, 220);
+    }
+
+    function createGrid() {
+      grid.innerHTML = "";
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement("div");
+        cell.className = "grid-cell";
+        cell.id = "cell" + i;
+        cell.setAttribute("role", "gridcell");
+
+        const img = document.createElement("img");
+        img.alt = "Target image";
+        img.draggable = false;
+        cell.appendChild(img);
+
+        cell.addEventListener("pointerdown", () => {
+          firstInteraction = true; // enable audio from here on
+          handleCellClick(cell.id);
+        });
+
+        grid.appendChild(cell);
+        loadCell(cell.id);
+      }
+    }
+
+    function handleCellClick(cellId) {
+      const now = performance.now();
+      const appearedAt = cellTimers[cellId] || now;
+      const reaction = Math.max(0, now - appearedAt);
+
+      const cell = document.getElementById(cellId);
+      if (!cell) return;
+
+      const img = cell.querySelector("img");
+      const isBad = img.dataset.isBad === "true" || img.dataset.isBad === true;
+
+      if (isBad) {
+        const points = Math.max(0, SCORE_BASE_MS - Math.floor(reaction));
+        score += points;
+        playSound(badSound);
+        addFlash(cell, "bad");
+      } else {
+        playSound(goodSound);
+        addFlash(cell, "good");
+      }
+
+      updateScore();
+      loadCell(cellId);
+    }
+
+    /***********************
+     * Timer + Auto Swap
+     ***********************/
+    function startTimer() {
+      // Text countdown (every second)
+      timeLeft = Math.floor(GAME_TIME / 1000);
+      timerEl.textContent = `Time Left: ${timeLeft}s`;
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = `Time Left: ${Math.max(0, timeLeft)}s`;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+        }
+      }, 1000);
+
+      // Smooth bar animation (every 50ms)
+      const total = GAME_TIME;
+      let elapsed = 0;
+      timerBar.style.width = "100%";
+      timerBarInterval = setInterval(() => {
+        elapsed += 50;
+        const progress = Math.max(0, 1 - elapsed / total);
+        timerBar.style.width = (progress * 100) + "%";
+        if (elapsed >= total) {
+          clearInterval(timerBarInterval);
+        }
+      }, 50);
+    }
+
+
+    /***********************
+     * Lifecycle
+     ***********************/
+    function startGame() {
+      // Reset state
+      score = 0;
+      updateScore();
+      timerEl.textContent = "Time Left: 30s";
+      timerBar.style.width = "100%";
+      endScreen.classList.add("hidden");
+      grid.classList.remove("hidden");
+      nameInput.value = "";
+
+      preloadImages();
+      createGrid();
+      startPerCellSwaps();
+      startTimer();
+      endTimeout = setTimeout(endGame, GAME_TIME);
+    }
+
+    function endGame() {
+      stopAllIntervals()
+// Stop per-cell timers
+Object.values(cellSwapTimers).forEach(t => clearTimeout(t));
+cellSwapTimers = {};
+      playSound(gameOverSound);
+
+      grid.classList.add("hidden");
+      endScreen.classList.remove("hidden");
+      finalScoreText.textContent = `Your score: ${score.toLocaleString()}`;
+
+      showLeaderboard();
+      // Focus name input for quick entry
+      setTimeout(() => nameInput.focus(), 50);
+    }
+
+    function stopAllIntervals() {
+      if (timerInterval) clearInterval(timerInterval);
+      if (timerBarInterval) clearInterval(timerBarInterval);
+      if (autoSwapTimer) clearInterval(autoSwapTimer);
+      if (endTimeout) clearTimeout(endTimeout);
+      timerInterval = timerBarInterval = autoSwapTimer = endTimeout = null;
+    }
+
+    function updateScore() {
+      scoreEl.textContent = `Score: ${score.toLocaleString()}`;
+    }
+
+    /***********************
+     * Leaderboard
+     ***********************/
+    function getLeaderboard() {
+      try {
+        return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
+      } catch {
+        return [];
+      }
+    }
+
+    function setLeaderboard(list) {
+      localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(list));
+    }
+
+    function saveScore() {
+      const name = (nameInput.value || "").trim();
+      if (!name) {
+        nameInput.focus();
+        return;
+      }
+      const list = getLeaderboard();
+      list.push({ name, score, ts: Date.now() });
+      list.sort((a, b) => b.score - a.score || a.ts - b.ts);
+      setLeaderboard(list.slice(0, 50)); // keep top 50 to limit storage
+      showLeaderboard();
+      // Disable save to avoid duplicates
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saved!";
+    }
+
+    function showLeaderboard() {
+      const list = getLeaderboard().slice(0, 10);
+      leaderboardEl.innerHTML = "";
+      if (!list.length) {
+        const li = document.createElement("li");
+        li.textContent = "No scores yet — be the first!";
+        leaderboardEl.appendChild(li);
+        return;
+      }
+      list.forEach((entry, idx) => {
+        const li = document.createElement("li");
+        const left = document.createElement("span");
+        left.textContent = `${idx + 1}. ${entry.name}`;
+        const right = document.createElement("span");
+        right.textContent = entry.score.toLocaleString();
+        li.appendChild(left);
+        li.appendChild(right);
+        leaderboardEl.appendChild(li);
+      });
+    }
+
+    /***********************
+     * Events
+     ***********************/
+    saveBtn.addEventListener("click", saveScore);
+    playAgainBtn.addEventListener("click", () => {
+      // reset state and restart
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Score";
+      startGame();
+    });
+
+    // Start immediately when page loads
+    window.addEventListener("load", startGame);
+  </script>
+</body>
+</html>
